@@ -1,0 +1,2 @@
+private text collector
+build

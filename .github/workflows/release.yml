@@ -1,0 +1,38 @@
+name: Build MUSL Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-22.04  # Explicitly use 22.04 to avoid 24.04 transition issues
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust (with MUSL target)
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: x86_64-unknown-linux-musl
+
+      - name: Build MUSL Binary
+        run: |
+          cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/x86_64-unknown-linux-musl/release/texter
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false

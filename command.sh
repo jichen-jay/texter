@@ -1,0 +1,1 @@
+nix profile install -f default.nix
