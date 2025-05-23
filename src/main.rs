@@ -75,15 +75,51 @@ fn main() {
 }
 
 fn copy_to_clipboard(text: &str) -> io::Result<()> {
-    let mut child = Command::new("wl-copy")
-        .stdin(std::process::Stdio::piped())
-        .spawn()?;
+    // Try common Ubuntu clipboard utilities in order of preference
+    let clipboard_commands = [
+        ("xclip", vec!["-selection", "clipboard"]),
+        ("xsel", vec!["--clipboard", "--input"]),
+        ("wl-copy", vec![]), // For Wayland systems
+    ];
 
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(text.as_bytes())?;
+    for (cmd, args) in &clipboard_commands {
+        match Command::new(cmd)
+            .args(args)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(mut child) => {
+                if let Some(mut stdin) = child.stdin.take() {
+                    stdin.write_all(text.as_bytes())?;
+                    drop(stdin); // Close stdin to signal end of input
+                }
+
+                match child.wait() {
+                    Ok(status) if status.success() => {
+                        println!("Content copied to clipboard using {}", cmd);
+                        return Ok(());
+                    }
+                    Ok(_) => {
+                        eprintln!("Warning: {} exited with non-zero status", cmd);
+                        continue; // Try next command
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Error waiting for {}: {}", cmd, e);
+                        continue; // Try next command
+                    }
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                continue; // Try next command
+            }
+            Err(e) => {
+                eprintln!("Warning: Error spawning {}: {}", cmd, e);
+                continue; // Try next command
+            }
+        }
     }
 
-    child.wait()?;
+    println!("Warning: No clipboard utility found. Install xclip with: sudo apt install xclip");
     Ok(())
 }
 
